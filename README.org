@@ -1,0 +1,121 @@
+#+TITLE: pwnypus
+#+AUTHOR: Shorden
+#+OPTIONS: toc:nil todo:nil
+
+#+HTML: <img src="assets/pwnypus.png" align="right" alt="Dope-ass picture of a hacking platypus.">
+
+CTF tooling on Darwin, powered by Nix.
+
+This could very possible also be helpful for Linux users, but things should mostly work out of the box for you (especially if you're on x86).
+
+* TODO Demo
+
+* TODO Usage
+
+* Project Goals
+At minimum, must be able to solve all challenges in [[https://2024.uiuc.tf/challenges][UIUCTF]].
+
+** Categories
+*** crypto [0/3]
+This has feature parity with the [[https://github.com/cryptohack/cryptohack-docker][CryptoHack Dockerfile]].
+
+**** TODO sage
+[[https://github.com/NixOS/nixpkgs/pull/264126][nixpkgs]]
+**** TODO pycrptodome
+**** TODO z3
+
+*** pwn [0/4]
+Must be able to install other versions of libc, using Nix of course.
+In much the same way that [[https://github.com/io12/pwninit][pwninit]] works, this should provide a flake template that can be used to instantiate a new flake for tackling a pwn challenge.
+
+**** TODO pwntools
+**** TODO gdb
+I have the overlay, I just need to package it nicely into fyshpkgs.
+I /should/ probably upstream my "no host CPU" change into nixpkgs, but I need to make it clear for end users how to add new architectures: I think including x86-, x86_64-, and aarch64-linux is sensible to start off with.
+The other thing I have to figure out is how to make ~gdb~ aware of new Python scripts; this should be a matter of tweaking the build options (I think I also tweaked something to allow all =.gdbinit= files to be trusted, which seems legit).
+
+***** TODO gef
+***** TODO pwndbg
+The main challenge here is removing references to ldd, which [[https://jmmv.dev/2023/07/ldd-untrusted-binaries.html][only works on Linux]].
+
+***** TODO lldb :stretch:
+I tried to like lldb. Really, I did, but the UX is actually dogwater.
+I ought to come back to this once I upgrade to Emacs 30, which adds support for lldb in GUD; until then, I have zero personal incentive to work on this.
+(It's really useful for aarch64-darwin binaries... never seen a CTF include those, though.)
+
+**** TODO radare2
+**** TODO ROP tooling
+[[https://github.com/JonathanSalwan/ROPgadget][ROPgadget]], [[https://github.com/sashs/Ropper][Ropper]]
+
+**** TODO xenu
+[[https://github.com/Feyorsh/xenu][github]]
+This is by far the most difficult thing to work on, but this needs to be (at minimum) usable for running userland binaries, and I would eventually like to use it for [[*(Stretch goal) macOS/NeXTSTEP kernel hacking][kernel hacking]] as well.
+
+I haven't really figured out a great way to optimize the UX, currently it's
+1. Invoke xenu, passing in the disk image and initramfs
+2. Install whatever you need using ~nix shell~ or similar
+3. Run the binary, and /maybe/ add =ROSETTA_DEBUGSERVER_PORT= to allow ~gdb~ to connect (this should be, but is not currently, forwarded to be accessible on the host)
+
+Eventually I would like a UX like ~nix run github:feyorsh/pwnypus#xenu --args <my-bin> -p 1337~ and it will spin up in the background, and provide you a shell over SSH.
+Generally speaking you don't want to spinup a bunch of VMs as that will eat disk space like crazy; maybe the suggested use case is one flake.nix/VM per CTF, and you can make a separate =devShell= and =.envrc= for a challenge if need be.
+
+There are also some outstanding bugs which are annoying, mainly
+- Ctrl-C gets interpreted by the shell running xenu, not the guest VM
+- The serial console is really finnicky and the display can get messed up very easily
+- A kernel panic will happen if you leave the guest on for long enough, likely an [[https://github.com/utmapp/UTM/issues/5967][Apple Virtualization issue]]
+
+***** TODO macOS/NeXTSTEP kernel hacking :stretch:
+Talk to Ravi; also see [[https://github.com/jprx/darwin-xnu-build][building XNU]], [[https://github.com/jprx/OSX-KVM][OSX in KVM]], and [[https://github.com/tpoechtrager/osxcross][osxcross]].
+
+**** TODO QEMU
+Might want to toss this in because QEMU covers a lot of use cases that I can't anticipate, but my focus is on [[*xenu][xenu]] for the time being.
+
+***** TODO Linux kernel hacking :stretch:
+I imagine QEMU is much more suitable for kernel stuff than xenu.
+
+*** web [0/3]
+**** TODO Burp Suite
+Probably going to start by chucking the provided binary into fyshpkgs, but I would love for someone to help me build this from source.
+
+**** TODO Wireshark
+So Wireshark in nixpkgs does work on pcaps, but has some issues capturing on local interfaces due to needing root perms.
+
+**** TODO CLI tools
+nmap, curl, etc. These should be very easy.
+
+*** rev [0/3]
+**** TODO Binary Ninja
+[[file:~/Personal/fyshpkgs/pkgs/binary-ninja.nix::{ stdenv][fyshpkgs]]
+
+I need to add an update script and use ~symlinkJoin~ instead of ~makeWrapper~; I think I also might need to mess around to get plugins working, but I haven't tested it so I'm not sure.
+Also have to test connecting to a ~gdbserver~.
+
+**** IDA
+I don't own a copy, so I can't/won't support it. Feel free to open a PR.
+
+**** TODO Angr
+Haven't tried porting it, but might be tough.
+See [[*z3][z3]] for relevant information.
+
+**** TODO Ghidra
+The version in nixpkgs actually works better out of the box than when installing directly due to default macOS permissions behaviour.
+The one saving grace of Java is that it runs everywhere, including, unfortunately, on my devices!
+
+*** misc [0/1]
+**** TODO Quantum
+Very few CTFs have quantum challenges, but I will nepo baby my interests in here, goddammit.
+This requires fixing qiskit in nixpkgs (and maybe adding pennylane).
+**** TODO Jails
+I have no idea what you could need besides stock Python for pyjails; this is currently a stub.
+
+**** Boot2root and Red Teaming
+Eh, I don't really care about this, but I get the feeling that some people might.
+This is not a priority item, but at some point it might be nice to add stuff like ~metasploit~, =rockyou.txt=, stuff like that.
+
+**** Steganography
+No.
+
+** Docker
+pwnypus should be able to spinup Docker containers provided at CTF, and ideally have a way for a Python =requirements.txt= to be spunup.
+This could be as simple as providing poetry2nix and Docker, we'll see.
+
