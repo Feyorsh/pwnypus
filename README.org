@@ -2,7 +2,7 @@
 #+AUTHOR: Shorden
 #+OPTIONS: toc:nil todo:nil
 
-#+HTML: <img src="assets/pwnypus.png" align="right" alt="Dope-ass picture of a hacking platypus.">
+#+HTML: <img src="assets/platypus.png" align="right" alt="Dope-ass picture of a hacking platypus.">
 
 CTF tooling on Darwin, powered by Nix.
 
