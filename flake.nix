@@ -10,26 +10,40 @@
   };
 
   outputs = inputs@{ self, nixpkgs, fyshpkgs, flake-utils, ... }:
-    # eventually, I might want to include linux
-    flake-utils.lib.eachSystem [ "aarch64-linux" "aarch64-darwin" ] (system:
-      let pkgs = import nixpkgs {
-            inherit system;
-            overlays = [ fyshpkgs.overlay.${system} ];
-            config.allowUnfree = true;
-          };
-          # ugh ok so *in theory* host and target packages can peacefully coexist  with .__splicedPackages, but tbh it's a lot of trial and error and a pain in the ass.
-          # hopefully splitting them up like this makes it easier to say e.g. `my-pkgs`.gdb and you can include multiple gdbs. This seems much more flexible.
-          pkgs-x86 = (import nixpkgs {
-            inherit system;
-            config.allowUnfree = true;
-            # crossSystem = { system = "x86_64-linux"; };
-            crossSystem = "x86_64-linux";
-          }).__splicedPackages;
-          inherit (nixpkgs) lib;
-          # FIXME I don't know of a way to override vars in a let binding...
-          python = pkgs.python311;
+    let
+      inherit (nixpkgs) lib;
+
+      unfree = true # (import nixpkgs { inherit system; }).config.allowUnfree
+               || builtins.getEnv "PWNYPUS_ALLOW_UNFREE" == "1";
+      unfree-filter = ps: let
+        free = lib.lists.partition (l: !(lib.attrsets.attrByPath [ "meta" "unfree" ] false l)) ps;
+        ws = lib.strings.concatStringsSep ", " (lib.lists.forEach free.wrong (p: p.name));
+        pns = if builtins.length free.wrong == 1 then " ${ws} is" else "s ${ws} are";
+      in
+        lib.warnIfNot (unfree || free.wrong == []) "pacakge${pns} unfree and won't be evaluated (set PWNYPUS_ALLOW_UNFREE=1 to allow)" free.right;
+      
+      # shell-filter = lib.attrsets.mapAttrs (_: v: lib.attrsets.updateManyAttrsByPath [ { path = [ "" ]; update = unfree-filter; } ] v);
+    in {
+      darwinModules.chmodbpf = import ./chmodbpf.nix;
+    } // (flake-utils.lib.eachSystem [ "aarch64-linux" "aarch64-darwin" ] (system:
+      let
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [ fyshpkgs.overlay.${system} ];
+          config.allowUnfree = true;
+        };
+        # ugh ok so *in theory* host and target packages can peacefully coexist  with .__splicedPackages, but tbh it's a lot of trial and error and a pain in the ass.
+        # hopefully splitting them up like this makes it easier to say e.g. `my-pkgs`.gdb and you can include multiple gdbs. This seems much more flexible.
+        pkgs-x86 = (import nixpkgs {
+          inherit system;
+          crossSystem = "x86_64-linux";
+          config.allowUnfree = true;
+        }).__splicedPackages;
+
+        python = pkgs.python311;
       in {
         packages = rec { };
+
         devShells = rec {
           crypto = with pkgs; mkShell {
             packages = let
@@ -53,7 +67,7 @@
             ];
           };
           rev = with pkgs; mkShell {
-            packages = [
+            packages = unfree-filter [
               (python.withPackages(ps: with ps; [
                 angr
               ]))
