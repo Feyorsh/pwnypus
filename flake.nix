@@ -77,6 +77,19 @@
               binary-ninja-dev
             ];
           };
+          web = with pkgs; mkShell {
+            packages = unfree-filter [
+              nodejs
+              # burpsuite
+              wireshark
+
+              hydra-thc
+              wfuzz
+              gobuster
+              sqlmap
+              nikto
+            ];
+          };
           # probably can't merge shells with different pkgs? we'll see
           all = with pkgs; mkShell {
             inputsFrom = with lib.attrsets; mapAttrsToList (n: v: optionalAttrs (!builtins.elem n [ "default" "all" ]) v) self.outputs.devShells.${system};
