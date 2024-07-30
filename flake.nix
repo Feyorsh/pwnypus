@@ -25,6 +25,7 @@
       # shell-filter = lib.attrsets.mapAttrs (_: v: lib.attrsets.updateManyAttrsByPath [ { path = [ "" ]; update = unfree-filter; } ] v);
     in {
       darwinModules.chmodbpf = import ./chmodbpf.nix;
+      darwinModules.xquartz = import ./xquartz.nix;
     } // (flake-utils.lib.eachSystem [ "aarch64-linux" "aarch64-darwin" ] (system:
       let
         pkgs = import nixpkgs {
