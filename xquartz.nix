@@ -50,6 +50,9 @@ in {
             "${cfg.package}/bin/Xquartz"
           ];
         }).outPath;
+        etc."ssh/ssh_config.d/70-xquartz.conf".text = ''
+          XAuthLocation ${pkgs.xorg.xauth}/bin/xauth
+        '';
     };
   };
 }
