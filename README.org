@@ -9,30 +9,76 @@ CTF tooling on Darwin, powered by Nix.
 This could very possible also be helpful for Linux users, but things should mostly work out of the box for you (especially if you're on x86).
 
 * TODO Demo
+#+begin_src shell
+nix develop github:feyorsh/pwnypus#crypto -c
+#+end_src
 
 * TODO Usage
+
+** Quirks
+
+*** Binary Ninja
+tl;dr
+Package updates are hard with Nix; using the dev channel requires writing your own updater script and versioning binja yourself
+
+To allow using oneliners like ~nix shell github:feyorsh/pwnypus#pwn~ that would otherwise fail
+
+Like most closed source software, it's a pain to use with Nix (although ironically easier on macOS vs NixOS).
+The biggest issue is that Nix packages can't update in place as all packages are immutable.
+To ammeliorate this issue, I wrote an update script (primarily for my own use) to automate the process of requesting a download link and updating the hashes.
+
+Unfortunately you can only request a specific version of Binary Ninja if you have a commercial license, so any dev version bump I make is made obsolete within a day; this goes for the stable channel too, but the releases stay current for much longer.
+
+The good news is that if you have an installer, you can just override the version tracked in fyshpkgs with whatever version you have, like so:
+#+begin_src nix
+TODO
+#+end_src
+This is a /necessity/ if you want to use the dev channel.
+
+*** Wireshark/tcpdump
+TL;DR
+If you use Nix darwin, add wireshark.enable to your =configuration.nix= to be able to run without root permissions.
+
+Wireshark and similar utilities use BPF to capture packets.
+However, on macOS =/dev/bpf*= is restricted to root only; even macOS's [[https://developer.apple.com/documentation/network/recording_a_packet_trace][vendored copy]] of tcpdump needs to be run as root:
+#+begin_src shell :cache yes :results output verbatim
+which tcpdump
+tcpdump -i en0 2>&1
+#+end_src
+
+#+RESULTS[99833f897b46759958a228fa1cce793879d74854]:
+: /usr/sbin/tcpdump
+: tcpdump: en0: You don't have permission to capture on that device
+: ((cannot open BPF device) /dev/bpf0: Permission denied)
+
+Even if you wanted to make Wireshark SUID (probably not a good idea), Nix cannot create SUID binaries anyway.
+
+The solution upstream recommends is to manually ~chgrp~ all BPF devices on boot using a Launch Daemon, and add yourself to that group; pwnypus provides a nix-darwin module to do this for you.
+
+*** TODO Burpsuite
+undmg shits the bed on whatever compression PortSwigger uses; even though using their installer is ideal, it still kinda sucks because they vendor chromium... oh well.
+I tried packaging just the jar (no browser), shipping an enterprise-configured slimmed-down version of firefox as a proxy substitute, but I ran into trouble with the java keystore and baking the keys into a nix derivation.
 
 * Project Goals
 At minimum, must be able to solve all challenges in [[https://2024.uiuc.tf/challenges][UIUCTF]].
 
 ** Categories
-*** crypto [0/3]
+*** crypto [3/4]
 This has feature parity with the [[https://github.com/cryptohack/cryptohack-docker][CryptoHack Dockerfile]].
 
-**** TODO sage
+**** TODO [[https://github.com/RsaCtfTool/RsaCtfTool][RsaCtfTool]]
+**** DONE sage
 [[https://github.com/NixOS/nixpkgs/pull/264126][nixpkgs]]
-**** TODO pycrptodome
-**** TODO z3
 
-*** pwn [0/4]
+**** DONE pycrptodome
+**** DONE z3
+*** pwn [1/6]
 Must be able to install other versions of libc, using Nix of course.
 In much the same way that [[https://github.com/io12/pwninit][pwninit]] works, this should provide a flake template that can be used to instantiate a new flake for tackling a pwn challenge.
 
 **** TODO pwntools
-**** TODO gdb
-I have the overlay, I just need to package it nicely into fyshpkgs.
-I /should/ probably upstream my "no host CPU" change into nixpkgs, but I need to make it clear for end users how to add new architectures: I think including x86-, x86_64-, and aarch64-linux is sensible to start off with.
-The other thing I have to figure out is how to make ~gdb~ aware of new Python scripts; this should be a matter of tweaking the build options (I think I also tweaked something to allow all =.gdbinit= files to be trusted, which seems legit).
+**** DONE gdb
+Works as expected when using nixpkgs cross ([[https://github.com/NixOS/nixpkgs/pull/328712][PR]] to avoid unsupported platform errors)
 
 ***** TODO gef
 ***** TODO pwndbg
@@ -64,6 +110,10 @@ There are also some outstanding bugs which are annoying, mainly
 - The serial console is really finnicky and the display can get messed up very easily
 - A kernel panic will happen if you leave the guest on for long enough, likely an [[https://github.com/utmapp/UTM/issues/5967][Apple Virtualization issue]]
 
+***** TODO Publish a release on feyorsh/xenu
+Then we can override the xenu derivation to use the binary from github; this allows anyone to download xenu without needing to build it (currently requires xcode).
+This is obviously a hack, but is meant to be a stopgap measure that allows for "nix shell" oneliners until sdk 13 lands in nixpkgs.
+
 ***** TODO macOS/NeXTSTEP kernel hacking :stretch:
 Talk to Ravi; also see [[https://github.com/jprx/darwin-xnu-build][building XNU]], [[https://github.com/jprx/OSX-KVM][OSX in KVM]], and [[https://github.com/tpoechtrager/osxcross][osxcross]].
 
@@ -73,33 +123,38 @@ Might want to toss this in because QEMU covers a lot of use cases that I can't a
 ***** TODO Linux kernel hacking :stretch:
 I imagine QEMU is much more suitable for kernel stuff than xenu.
 
-*** web [0/3]
+*** web [1/3]
 **** TODO Burp Suite
 Probably going to start by chucking the provided binary into fyshpkgs, but I would love for someone to help me build this from source.
 
-**** TODO Wireshark
-So Wireshark in nixpkgs does work on pcaps, but has some issues capturing on local interfaces due to needing root perms.
+**** DONE Wireshark
+[[https://github.com/NixOS/nixpkgs/pull/330742][Fixed in nixpkgs]], I also wrote a [[./chmodbpf.nix][nix-darwin module]] to allow unprivileged BPF access
 
 **** TODO CLI tools
 nmap, curl, etc. These should be very easy.
 
-*** rev [0/3]
+*** rev [2/5]
 **** TODO Binary Ninja
-[[file:~/Personal/fyshpkgs/pkgs/binary-ninja.nix::{ stdenv][fyshpkgs]]
+[[https://github.com/Feyorsh/fyshpkgs/blob/e86900ec51490734afb00a8a8c1b387be329f918/pkgs/binary-ninja/default.nix][fyshpkgs]]
 
-I need to add an update script and use ~symlinkJoin~ instead of ~makeWrapper~; I think I also might need to mess around to get plugins working, but I haven't tested it so I'm not sure.
-Also have to test connecting to a ~gdbserver~.
+Still have to test connecting to a ~gdbserver~.
 
-**** IDA
-I don't own a copy, so I can't/won't support it. Feel free to open a PR.
+Note that this is significantly less convenient from the CLI if you don't pin the pwnypus channel, as the version could change whenever and you would have to request a new download link, add the installer to the store, etc.
+For that reason, unfree packages are disabled by default, but can easily be enabled by setting =PWNYPUS_ALLOW_UNFREE= or having unfree packages enabled in your nixpkgs config. (TODO: add a way to override from a flake)
 
-**** TODO Angr
-Haven't tried porting it, but might be tough.
-See [[*z3][z3]] for relevant information.
+**** TODO [[https://www.intel.com/content/www/us/en/developer/articles/tool/pin-a-dynamic-binary-instrumentation-tool.html][Pin]]
+Pretty sure this can only run on Intel chips; they dropped macOS support a while ago. May or may not be possible with [[*xenu][xenu]] (I've heard weird stuff about Pin on Rosetta).
 
-**** TODO Ghidra
+**** TODO IDA
++I don't own a copy+, so I can't/won't support it. Feel free to open a PR.
+Knock knock, it's the Ida Pro 9 Beta 😳
+
+**** DONE Angr
+Haven't tried porting it, but might be tough (already in nixpkgs, sweet!)
+
+**** DONE Ghidra
 The version in nixpkgs actually works better out of the box than when installing directly due to default macOS permissions behaviour.
-The one saving grace of Java is that it runs everywhere, including, unfortunately, on my devices!
+The one saving grace of Java is that it runs everywhere, including, unfortunately, on my device!
 
 *** misc [0/1]
 **** TODO Quantum
@@ -119,3 +174,25 @@ No.
 pwnypus should be able to spinup Docker containers provided at CTF, and ideally have a way for a Python =requirements.txt= to be spunup.
 This could be as simple as providing poetry2nix and Docker, we'll see.
 
+* FAQ
+- My devShell is missing a package?
+  Proprietary software is removed from devShells by default; this is to make all outputs evaluate so shell oneliners still work.
+  See section on binary ninja for more information.
+
+- Where do I find the application?
+  Nix does not add the Applications output to $PATH, but will add /bin if it exists; for this reason, I added shell aliases, like ~binja -> Binary Ninja.app~.
+
+- What is fyshpkgs?
+  fyshpkgs is my personal package repository, which includes some packages pwnypus uses. The reason they live in fyshpkgs and not nixpkgs is usually because they're unfree.
+
+- I'd like to add xyz...
+  You can add packages to a devshell like so: <TODO>
+  You can also merge 2 devshells into a devshell that includes the outputs of both with <TODO>.
+  If you think other people would benefit from your change, open a PR!
+
+- Aren't most of these packages in nixpkgs? What's the point of this repo?
+  Ideally, this repository would be nothing more than add a few predefined devshells for convenience. But many tools required for CTF are poorly supported in nixpkgs or require really hacky workarounds that don't really make sense to upstream for Linux users to deal with.
+  Whenever possible, development effort should be spent on fixing the issue upstream: see for example my efforts on fixing Sagemath.
+
+- What is xenu?
+  xenu (XNU emulating non-unfree) is a thin QEMU-like interface to the Apple [[https://developer.apple.com/documentation/virtualization][Virtualization]] framework; its primary use in pwnypus is to provide a lightweight VM that can run aarch64-linux and x86_64-linux (through rosetta-linux) binaries. (QEMU can use the apple _hypervisor_ framework as an accelerator for aarch64-linux, but does not have access to rosetta-linux to run x86. You can emulate an x86 VM, but that's quite slow.)

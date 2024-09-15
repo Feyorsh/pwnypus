@@ -2,8 +2,7 @@
   description = "*Gyururururururu*";
 
   inputs = {
-    # nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    nixpkgs.url = "github:feyorsh/nixpkgs/sage-darwin";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     fyshpkgs.url = "github:feyorsh/fyshpkgs";
     # xenu.url = "github:Feyorsh/xenu/main";
     flake-utils.url = "github:numtide/flake-utils";
@@ -74,7 +73,7 @@
               ]))
               radare2
               ghidra
-              binary-ninja-dev
+              binary-ninja
             ];
           };
           web = with pkgs; mkShell {
@@ -83,8 +82,10 @@
               # burpsuite
               wireshark
 
-              hydra-thc
-              wfuzz
+              curl
+              nmap
+              thc-hydra
+              # wfuzz fixed in nixpkgs
               gobuster
               sqlmap
               nikto
@@ -96,5 +97,5 @@
           };
           default = crypto;
         };
-      });
+      }));
 }
