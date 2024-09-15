@@ -2,6 +2,7 @@
 with lib;                      
 let
   cfg = config.services.xquartz;
+  xauth = pkgs.xorg.xauth;
 in {
   options.services.xquartz = {
     enable = mkEnableOption "XQuartz";
@@ -50,6 +51,9 @@ in {
             "${cfg.package}/bin/Xquartz"
           ];
         }).outPath;
+        etc."ssh/ssh_config.d/70-xquartz.conf".text = ''
+          XAuthLocation ${xauth}/bin/xauth
+        '';
     };
   };
 }
