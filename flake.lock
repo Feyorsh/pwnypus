@@ -21,11 +21,11 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1710146030,
-        "narHash": "sha256-SZ5L6eA7HJ/nmkzGG7/ISclqe6oZdOZTNoesiInkXPQ=",
+        "lastModified": 1726560853,
+        "narHash": "sha256-X6rJYSESBVr3hBoH0WbKE5KvhPU5bloyZ2L4K60/fPQ=",
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "b1d9ab70662946ef0850d488da1c9019f3a9752a",
+        "rev": "c1dfcf08411b08f6b8615f7d8971a2bfa81d5e8a",
         "type": "github"
       },
       "original": {
@@ -56,29 +56,68 @@
       "inputs": {
         "flake-compat": "flake-compat",
         "flake-utils": "flake-utils_2",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": [
+          "nixpkgs"
+        ]
       },
       "locked": {
-        "lastModified": 1721865877,
-        "narHash": "sha256-7OLSn+dAOz69WN3Eu4zRj7QgbBNddjH6B65wYdJrr5M=",
-        "owner": "feyorsh",
+        "lastModified": 1729587845,
+        "narHash": "sha256-NORQUt0StEa8soKYkD/IM/5++KOpgzmT6uS2fq3pD4M=",
+        "owner": "Feyorsh",
         "repo": "fyshpkgs",
-        "rev": "e86900ec51490734afb00a8a8c1b387be329f918",
+        "rev": "d6701102b41644189edc45da584b7e8304707b4f",
         "type": "github"
       },
       "original": {
-        "owner": "feyorsh",
+        "owner": "Feyorsh",
         "repo": "fyshpkgs",
+        "type": "github"
+      }
+    },
+    "nixlib": {
+      "locked": {
+        "lastModified": 1693701915,
+        "narHash": "sha256-waHPLdDYUOHSEtMKKabcKIMhlUOHPOOPQ9UyFeEoovs=",
+        "owner": "nix-community",
+        "repo": "nixpkgs.lib",
+        "rev": "f5af57d3ef9947a70ac86e42695231ac1ad00c25",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "nixpkgs.lib",
+        "type": "github"
+      }
+    },
+    "nixos-generators": {
+      "inputs": {
+        "nixlib": "nixlib",
+        "nixpkgs": [
+          "xenu",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1707405218,
+        "narHash": "sha256-ZQ366Oo8WJbCqXAZET7N0Sz6RQ3G2IbqVtxQRSa3SXc=",
+        "owner": "nix-community",
+        "repo": "nixos-generators",
+        "rev": "843e2f04c716092797ffa4ce14c446adce2f09ef",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "nixos-generators",
         "type": "github"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1719468428,
-        "narHash": "sha256-vN5xJAZ4UGREEglh3lfbbkIj+MPEYMuqewMn4atZFaQ=",
+        "lastModified": 1729265718,
+        "narHash": "sha256-4HQI+6LsO3kpWTYuVGIzhJs1cetFcwT7quWCk/6rqeo=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1e3deb3d8a86a870d925760db1a5adecc64d329d",
+        "rev": "ccc0c2126893dd20963580b6478d1a10a4512185",
         "type": "github"
       },
       "original": {
@@ -88,27 +127,12 @@
         "type": "github"
       }
     },
-    "nixpkgs_2": {
-      "locked": {
-        "lastModified": 1721664781,
-        "narHash": "sha256-n6B/K8R5Vncl7oHeKPbm83Hh2K0SP7F1UkUr21M3WyI=",
-        "owner": "feyorsh",
-        "repo": "nixpkgs",
-        "rev": "1685bf63b22f124cebf3bee0a8fabecc9c846370",
-        "type": "github"
-      },
-      "original": {
-        "owner": "feyorsh",
-        "ref": "sage-darwin",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
         "fyshpkgs": "fyshpkgs",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs",
+        "xenu": "xenu"
       }
     },
     "systems": {
@@ -138,6 +162,27 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "xenu": {
+      "inputs": {
+        "nixos-generators": "nixos-generators",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1729305905,
+        "narHash": "sha256-cJzEVuyKfitcgUbL2AWQid76fBJEhSf94n6GUVf23Aw=",
+        "owner": "Feyorsh",
+        "repo": "xenu",
+        "rev": "a6acaf3c0c27ce640d629bed6e7127ef728efc99",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Feyorsh",
+        "repo": "xenu",
         "type": "github"
       }
     }

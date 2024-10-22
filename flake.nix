@@ -2,9 +2,16 @@
   description = "*Gyururururururu*";
 
   inputs = {
+    # be careful when updating flakes; cross gdb/linux takes ~1 hour to build
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    fyshpkgs.url = "github:feyorsh/fyshpkgs";
-    # xenu.url = "github:Feyorsh/xenu/main";
+    xenu = {
+      url = "github:Feyorsh/xenu";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    fyshpkgs = {
+      url = "github:Feyorsh/fyshpkgs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -20,12 +27,11 @@
         pns = if builtins.length free.wrong == 1 then " ${ws} is" else "s ${ws} are";
       in
         lib.warnIfNot (unfree || free.wrong == []) "pacakge${pns} unfree and won't be evaluated (set PWNYPUS_ALLOW_UNFREE=1 to allow)" free.right;
-      
       # shell-filter = lib.attrsets.mapAttrs (_: v: lib.attrsets.updateManyAttrsByPath [ { path = [ "" ]; update = unfree-filter; } ] v);
     in {
       darwinModules.chmodbpf = import ./chmodbpf.nix;
       darwinModules.xquartz = import ./xquartz.nix;
-    } // (flake-utils.lib.eachSystem [ "aarch64-linux" "aarch64-darwin" ] (system:
+    } // (flake-utils.lib.eachSystem [ "aarch64-darwin" ] (system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -46,36 +52,72 @@
 
         devShells = rec {
           crypto = with pkgs; mkShell {
-            packages = let
-              sagemath = sage.override {
-                extraPythonPackages = ps: with ps; [
+            packages = [
+              (python3.buildEnv.override {
+                extraLibs = with python3Packages; [
+                  sage.lib
                   pwntools
                   pycryptodome
                   z3-solver
-                ]; };
-            in [
-              sagemath
-              (runCommand "python3" {} ''
-                 mkdir -p $out/bin
-                 ln -s ${lib.getBin sagemath.with-env}/bin/sage-python $out/bin/python3
-               '')
+                ];
+              })
             ];
           };
-          pwn = with pkgs-x86; mkShell {
+
+          pwn = let
+            # this arrangement is a bit fragile, and I'll tell you why:
+            # we want to debug e.g. x86_64-linux (target) binaries from an aarch64-darwin (host) machine
+            # gdb itself falls into the autoconf camp, so we just build it for targetPlatform == x86 != aarch64
+            # but the python ecosystem for plugins (capstone, unicorn, checksec, pyelftools),
+            # even though designed for x86, are cross platform by nature.
+            # so I only override the platform for bintools and gdb---nothing wrong with this in theory.
+            # *however*, usage of gdb in nixpkgs is not designed with this in mind. caveat emptor.
+            pkgsCross = pkgs-x86;
+            prefix = "${pkgsCross.stdenv.targetPlatform.config}-";
+            gdb = pkgsCross.buildPackages.gdb;
+            gdb' = pkgs.runCommand "gdb-cross" { nativeBuildInputs = [ ]; }
+            ''
+              mkdir -p $out/bin
+              ln -s ${gdb}/bin/${prefix}gdb $out/bin/gdb
+            '';
+            readelf' = pkgs.runCommand "readelf-cross" { nativeBuildInputs = [ ]; }
+            ''
+              mkdir -p $out/bin
+              ln -s ${pkgsCross.buildPackages.bintools-unwrapped}/bin/${prefix}readelf $out/bin/readelf
+            '';
+
+            # currently marked as broken
+            pwndbg = (pkgs.pwndbg.override {
+              gdb = gdb';
+            }).overrideAttrs {
+              meta.broken = pkgsCross.stdenv.targetPlatform.system == "aarch64-darwin";
+            };
+            gef = (pkgs.gef.override {
+              gdb = gdb';
+              bintools-unwrapped = readelf';
+            }).overrideAttrs {
+              meta.broken = pkgsCross.stdenv.targetPlatform.system == "aarch64-darwin";
+            };
+          in pkgs.mkShell {
             packages = [
               gdb
+              pwndbg
+              gef
             ];
           };
+
           rev = with pkgs; mkShell {
             packages = unfree-filter [
               (python.withPackages(ps: with ps; [
-                angr
+                # angr    # waiting on upstream update to unicorn 2.1.1
+                z3-solver
               ]))
               radare2
               ghidra
               binary-ninja
             ];
           };
+
           web = with pkgs; mkShell {
             packages = unfree-filter [
               nodejs
@@ -91,6 +133,7 @@
               nikto
             ];
           };
+
           # probably can't merge shells with different pkgs? we'll see
           all = with pkgs; mkShell {
             inputsFrom = with lib.attrsets; mapAttrsToList (n: v: optionalAttrs (!builtins.elem n [ "default" "all" ]) v) self.outputs.devShells.${system};
