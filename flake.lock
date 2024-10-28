@@ -61,11 +61,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1729587845,
-        "narHash": "sha256-NORQUt0StEa8soKYkD/IM/5++KOpgzmT6uS2fq3pD4M=",
+        "lastModified": 1730094271,
+        "narHash": "sha256-DAj8m9lPVxEaw7cBpX00ZSTyYDR1+3MOlLn9YniZAiM=",
         "owner": "Feyorsh",
         "repo": "fyshpkgs",
-        "rev": "d6701102b41644189edc45da584b7e8304707b4f",
+        "rev": "4fefeb11998c2839d1c876788f11bfceaec38960",
         "type": "github"
       },
       "original": {

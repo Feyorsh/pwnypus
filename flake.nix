@@ -19,15 +19,16 @@
     let
       inherit (nixpkgs) lib;
 
-      unfree = true # (import nixpkgs { inherit system; }).config.allowUnfree
+      allowUnfree = false # (import nixpkgs { inherit system; }).config.allowUnfree
                || builtins.getEnv "PWNYPUS_ALLOW_UNFREE" == "1";
-      unfree-filter = ps: let
-        free = lib.lists.partition (l: !(lib.attrsets.attrByPath [ "meta" "unfree" ] false l)) ps;
-        ws = lib.strings.concatStringsSep ", " (lib.lists.forEach free.wrong (p: p.name));
-        pns = if builtins.length free.wrong == 1 then " ${ws} is" else "s ${ws} are";
+      unfreeFilter = ps: let
+        freePkgs = lib.lists.partition (l: !(lib.attrsets.attrByPath [ "meta" "unfree" ] false l)) ps;
+        ws = lib.strings.concatStringsSep ", " (lib.lists.forEach freePkgs.wrong (p: p.name));
+        pns = if builtins.length freePkgs.wrong == 1 then " ${ws} is" else "s ${ws} are";
       in
-        lib.warnIfNot (unfree || free.wrong == []) "pacakge${pns} unfree and won't be evaluated (set PWNYPUS_ALLOW_UNFREE=1 to allow)" free.right;
-      # shell-filter = lib.attrsets.mapAttrs (_: v: lib.attrsets.updateManyAttrsByPath [ { path = [ "" ]; update = unfree-filter; } ] v);
+        if !(allowUnfree || freePkgs.wrong == [])
+        then lib.warn "pacakge${pns} unfree and won't be evaluated (set PWNYPUS_ALLOW_UNFREE=1 to allow)" freePkgs.right
+        else ps;
     in {
       darwinModules.chmodbpf = import ./chmodbpf.nix;
       darwinModules.xquartz = import ./xquartz.nix;
@@ -107,7 +108,7 @@
           };
 
           rev = with pkgs; mkShell {
-            packages = unfree-filter [
+            packages = unfreeFilter [
               (python.withPackages(ps: with ps; [
                 # angr    # waiting on upstream update to unicorn 2.1.1
                 z3-solver
@@ -115,11 +116,12 @@
               radare2
               ghidra
               binary-ninja
+              ida-pro
             ];
           };
 
           web = with pkgs; mkShell {
-            packages = unfree-filter [
+            packages = unfreeFilter [
               nodejs
               # burpsuite
               wireshark
