@@ -129,10 +129,12 @@
               curl
               nmap
               thc-hydra
-              # wfuzz fixed in nixpkgs
+              # wfuzz # transient closure depends on pyobjc; fix in nixpkgs
               gobuster
               sqlmap
               nikto
+
+              postman
             ];
           };
 

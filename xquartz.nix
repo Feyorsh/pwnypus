@@ -1,5 +1,5 @@
 { lib, pkgs, config, ... }:
-with lib;                      
+with lib;
 let
   cfg = config.services.xquartz;
   xauth = pkgs.xorg.xauth;
@@ -20,7 +20,7 @@ in {
     in {
       systemPackages = [ cfg.package ];
 
-      launchDaemons.${daemon}.source = 
+      launchDaemons.${daemon}.source =
         (pkgs.substitute {
           src = "${builtins.dirOf (builtins.unsafeGetAttrPos "pname" cfg.package).file}/${daemon}";
           substitutions = [
@@ -34,7 +34,7 @@ in {
           ];
         }).outPath;
 
-      launchAgents.${agent}.source = 
+      launchAgents.${agent}.source =
         (pkgs.substitute {
           src = "${builtins.dirOf (builtins.unsafeGetAttrPos "pname" cfg.package).file}/${agent}";
           substitutions = [

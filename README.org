@@ -1,44 +1,93 @@
 #+TITLE: pwnypus
 #+AUTHOR: Shorden
 #+OPTIONS: toc:nil todo:nil
+#+PROPERTY: header-args:shell :results none :eval no :cache yes
 
 #+HTML: <img src="assets/platypus.png" align="right" alt="Dope-ass picture of a hacking platypus.">
 
 CTF tooling on Darwin, powered by Nix.
 
-This could very possible also be helpful for Linux users, but things should mostly work out of the box for you (especially if you're on x86).
+This could very possibly also be helpful for Linux users, but things should mostly work out of the box for you already (especially if you're on x86).
 
-* TODO Demo
+* Try it
 #+begin_src shell
-nix develop github:feyorsh/pwnypus#crypto -c
+nix develop github:feyorsh/pwnypus#crypto -c "sage"
 #+end_src
 
-* TODO Usage
+#+begin_src shell
+nix develop github:feyorsh/pwnypus#rev -c "ghidra"
+#+end_src
 
-** Quirks
+# #+begin_src shell
+# nix run github:feyorsh/pwnypus#vm # pop a shell in an ephemeral linux vm
+# [pwny@nixos] ROSETTA_DEBUG=1337 ./challenge
 
-*** Binary Ninja
-tl;dr
-Package updates are hard with Nix; using the dev channel requires writing your own updater script and versioning binja yourself
+# nix develop github:feyorsh/pwnypus#pwn -c "pwndbg" # now in a different (host) shell:
+# pwndbg> target remote 1337
+# #+end_src
+# (I'm intentionally simplifying it quite a bit; see the [[https://github.com/Feyorsh/xenu/blob/b24baf8b507a1d0503b44d85976ec3edd253555f/examples/libc-rop/README.org][Libc ROP]] example at Xenu's repo for more details.)
 
-To allow using oneliners like ~nix shell github:feyorsh/pwnypus#pwn~ that would otherwise fail
+* FAQ
+** Why do I need ~PWNYPUS_ALLOW_UNFREE~?
+This is to ensure shell one-liners work.
 
-Like most closed source software, it's a pain to use with Nix (although ironically easier on macOS vs NixOS).
-The biggest issue is that Nix packages can't update in place as all packages are immutable.
-To ammeliorate this issue, I wrote an update script (primarily for my own use) to automate the process of requesting a download link and updating the hashes.
+This is actually motivated less from a free software perspective and more from a usability standpoint: most unfree Nix packages use something called ~requireFile~, which requires
+a) The user has a copy of the software
+b) The user adds that to the store manually
+For example, let's say I try to run Binary Ninja:
+#+begin_src shell
+$ nix develop .#rev
+trace: evaluation warning: pacakges binary-ninja-4.1.5747, ida-pro-9.0.240807 are unfree and won't be evaluated (set PWNYPUS_ALLOW_UNFREE=1 to allow)
+bash-5.2$ binja
+bash: binja: command not found
+#+end_src
+So this shell still has Ghidra and Radare2 and whatnot, but not Binary Ninja.
+What happens if I set ~PWNYPUS_ALLOW_UNFREE=1~?
+#+begin_src shell
+$ PWNYPUS_ALLOW_UNFREE=1 nix develop .#rev --impure
+error: builder for '/nix/store/md4kbm4r2j1w6lfcimg76q9bkr61mhhy-binaryninja_personal_macosx.dmg.drv' failed with exit code 1;
+       last 10 log lines:
+       > ***
+       > Binary Ninja is proprietary software and requires a license to install.
+       > (Alternatively, a freeware version can be installed from https://binary.ninja/free/.)
+       > Visit https://binary.ninja/recover/ to receive an email with a link to an installer; then add it to the Nix store like so:
+       >
+       > nix-prefetch-url file://$PWD/binaryninja_personal_macosx.dmg
+       > rm -rf binaryninja_personal_macosx.dmg
+       >
+       > ***
+       >
+       For full logs, run 'nix log /nix/store/md4kbm4r2j1w6lfcimg76q9bkr61mhhy-binaryninja_personal_macosx.dmg.drv'.
+error: 1 dependencies of derivation '/nix/store/y0zz2pcx156p8ms0r466q9vyzygxs8gv-binary-ninja-4.1.5747.drv' failed to build
+error: 1 dependencies of derivation '/nix/store/5rml98b5i7mzbwxls0h89x440rq5vnl0-nix-shell-env.drv' failed to build
+#+end_src
+So I need to run ~nix-prefetch-url~ with the installer I get after actually buying Binary Ninja.
+But of course, you probably won't have version 4.1.5747 (as it were), so there will be a hash mismatch---what to do?
 
-Unfortunately you can only request a specific version of Binary Ninja if you have a commercial license, so any dev version bump I make is made obsolete within a day; this goes for the stable channel too, but the releases stay current for much longer.
-
-The good news is that if you have an installer, you can just override the version tracked in fyshpkgs with whatever version you have, like so:
+The solution is to use an override with your version:
 #+begin_src nix
-TODO
+binary-ninja.overrideAttrs {
+  version = "4.2.0";
+  src = pkgs.requireFile {
+    name = "binaryninja_personal_dev_macosx.dmg";
+    message = "irrelevant";
+    sha256 = "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=";
+  };
+}
 #+end_src
-This is a /necessity/ if you want to use the dev channel.
+This requires making a flake to compose your overlay with fyshpkgs/pwnypus; also, I recommend creating a GC root for the installer to prevent it from getting garbage collected accidentally.
 
-*** Wireshark/tcpdump
-TL;DR
-If you use Nix darwin, add wireshark.enable to your =configuration.nix= to be able to run without root permissions.
+** Wireshark/tcpdump
+*tl;dr*
+If you use [[https://github.com/LnL7/nix-darwin][nix-darwin]], add the following to your =configuration.nix= to be able to run without root permissions:
+#+begin_src nix
+security.chmodbpf = {
+  enable = true;
+  members = [ YOUR_USERNAME ];
+};
+#+end_src
 
+*** Why ChmodBPF is necessary
 Wireshark and similar utilities use BPF to capture packets.
 However, on macOS =/dev/bpf*= is restricted to root only; even macOS's [[https://developer.apple.com/documentation/network/recording_a_packet_trace][vendored copy]] of tcpdump needs to be run as root:
 #+begin_src shell :cache yes :results output verbatim
@@ -53,44 +102,63 @@ tcpdump -i en0 2>&1
 
 Even if you wanted to make Wireshark SUID (probably not a good idea), Nix cannot create SUID binaries anyway.
 
-The solution upstream recommends is to manually ~chgrp~ all BPF devices on boot using a Launch Daemon, and add yourself to that group; pwnypus provides a nix-darwin module to do this for you.
+The solution upstream recommends is to manually ~chgrp~ all BPF devices on boot using a Launch Daemon to a group your user is in; pwnypus provides a nix-darwin module to do this for you.
 
-*** TODO Burpsuite
-undmg shits the bed on whatever compression PortSwigger uses; even though using their installer is ideal, it still kinda sucks because they vendor chromium... oh well.
-I tried packaging just the jar (no browser), shipping an enterprise-configured slimmed-down version of firefox as a proxy substitute, but I ran into trouble with the java keystore and baking the keys into a nix derivation.
+
+** xenu
+See [[https://github.com/Feyorsh/xenu][Xenu's own FAQ]].
+
+** What's the difference Xenu/Fyshpkgs/Pwnypus?
+- [[https://github.com/Feyorsh/fyshpkgs][fyshpkgs]] :: My personal Nix package repository, which includes some packages pwnypus uses.
+  I try to contribute upstream whenever possible, so packages in fyshpkgs are there because they're either unfree or unstable.
+- [[https://github.com/Feyorsh/xenu][xenu]] :: Basically, "Bash bindings" for the Apple Virtualization framework.
+  This is what powers ephemeral Linux shells _that can run =x86_64-linux= binaries using dynamic Rosetta2 translation_ (QEMU is great, but can't use Rosetta because it's an Apple product).
+  You can use Tart/UTM/Docker for this purpose as well, I mainly made this for fun.
+- pwnypus :: This is meant to be kinda like "[[https://jjjollyjim.github.io/arewehackersyet/index.html][Are We Hackers Yet?]]" for =aarch64-darwin=, but in addition to keeping track of packages to add, it serves as a place to accumulate "hacks" to actually make the packages work.
+  Where it makes sense, packages/nix-darwin modules should be upstreamed to nixpkgs.
+
+** Where do I find the application bundle (.app directory)?
+Nix doesn't add the =/Applications= outputPath of a package to any environment variables, but it's there (it will show up if you install it in ~home.packages~, for instance).
+I generally try to add wrappers in =/bin= to avoid this problem.
+
+** Docker
+Not surprisingly, the best way to do this is to just use Docker/Podman (preferably using Colima as the backend, as Docker behaves weirdly without Docker Desktop on MacOS).
 
 * Project Goals
 At minimum, must be able to solve all challenges in [[https://2024.uiuc.tf/challenges][UIUCTF]].
 
 ** Categories
 *** crypto [3/4]
-This has feature parity with the [[https://github.com/cryptohack/cryptohack-docker][CryptoHack Dockerfile]].
+We reached feature parity with the [[https://github.com/cryptohack/cryptohack-docker][CryptoHack Dockerfile]] 🥳
 
-**** TODO [[https://github.com/RsaCtfTool/RsaCtfTool][RsaCtfTool]]
 **** DONE sage
 [[https://github.com/NixOS/nixpkgs/pull/264126][nixpkgs]]
 
 **** DONE pycrptodome
 **** DONE z3
-*** pwn [1/6]
+**** TODO [[https://github.com/RsaCtfTool/RsaCtfTool][RsaCtfTool]]
+Kinda hacky, someone suggested it though
+
+*** pwn [4/6]
 Must be able to install other versions of libc, using Nix of course.
 In much the same way that [[https://github.com/io12/pwninit][pwninit]] works, this should provide a flake template that can be used to instantiate a new flake for tackling a pwn challenge.
 
-**** TODO pwntools
+**** DONE pwntools
 **** DONE gdb
 Works as expected when using nixpkgs cross ([[https://github.com/NixOS/nixpkgs/pull/328712][PR]] to avoid unsupported platform errors)
 
-***** TODO gef
-***** TODO pwndbg
-The main challenge here is removing references to ldd, which [[https://jmmv.dev/2023/07/ldd-untrusted-binaries.html][only works on Linux]].
+***** DONE gef
+***** DONE pwndbg
+Works fine after the switch to =pyelftools=.
+This will also be the best way to use ~lldb~, if I ever get around to that.
 
-***** TODO lldb :stretch:
-I tried to like lldb. Really, I did, but the UX is actually dogwater.
-I ought to come back to this once I upgrade to Emacs 30, which adds support for lldb in GUD; until then, I have zero personal incentive to work on this.
-(It's really useful for aarch64-darwin binaries... never seen a CTF include those, though.)
+***** TODO LLDB :stretch:
+I tried to like ~lldb~. Really, I did, but the UX is actually dogwater.
+I ought to come back to this once I upgrade to Emacs 30, which adds support for ~lldb~ in GUD; until then, I have zero personal incentive to work on this.
+(It's pretty much the only way to debug =aarch64-darwin= binaries... never seen a CTF include those, though.)
 
-**** TODO radare2
-**** TODO ROP tooling
+**** DONE radare2
+**** DONE ROP tooling
 [[https://github.com/JonathanSalwan/ROPgadget][ROPgadget]], [[https://github.com/sashs/Ropper][Ropper]]
 
 **** TODO xenu
@@ -106,60 +174,60 @@ Eventually I would like a UX like ~nix run github:feyorsh/pwnypus#xenu --args <m
 Generally speaking you don't want to spinup a bunch of VMs as that will eat disk space like crazy; maybe the suggested use case is one flake.nix/VM per CTF, and you can make a separate =devShell= and =.envrc= for a challenge if need be.
 
 There are also some outstanding bugs which are annoying, mainly
-- Ctrl-C gets interpreted by the shell running xenu, not the guest VM
+- Ctrl-C gets interpreted by the shell running xenu, not the guest VM (problem with ~stty~)
 - The serial console is really finnicky and the display can get messed up very easily
 - A kernel panic will happen if you leave the guest on for long enough, likely an [[https://github.com/utmapp/UTM/issues/5967][Apple Virtualization issue]]
 
-***** TODO Publish a release on feyorsh/xenu
-Then we can override the xenu derivation to use the binary from github; this allows anyone to download xenu without needing to build it (currently requires xcode).
-This is obviously a hack, but is meant to be a stopgap measure that allows for "nix shell" oneliners until sdk 13 lands in nixpkgs.
+***** PROG Publish a release on feyorsh/xenu
+The Xenu derivation currently requires Xcode to build, so I cut a release on GitHub and used the binary from there instead to avoid bootstrapping issues.
++This is meant to be a stopgap measure until SDK 13 lands in nixpkgs+ This is done thanks to [[https://github.com/NixOS/nixpkgs/pull/346043][the 🐐 reckenrode]]!
+I need to switch the build process over soon.
 
 ***** TODO macOS/NeXTSTEP kernel hacking :stretch:
 Talk to Ravi; also see [[https://github.com/jprx/darwin-xnu-build][building XNU]], [[https://github.com/jprx/OSX-KVM][OSX in KVM]], and [[https://github.com/tpoechtrager/osxcross][osxcross]].
 
 **** TODO QEMU
-Might want to toss this in because QEMU covers a lot of use cases that I can't anticipate, but my focus is on [[*xenu][xenu]] for the time being.
+QEMU covers a lot of use cases that I can't anticipate, but my focus is on [[*xenu][xenu]] for the time being.
 
 ***** TODO Linux kernel hacking :stretch:
 I imagine QEMU is much more suitable for kernel stuff than xenu.
 
-*** web [1/3]
+*** web [2/3]
 **** TODO Burp Suite
-Probably going to start by chucking the provided binary into fyshpkgs, but I would love for someone to help me build this from source.
+Further investigation required...
+I've tried:
+- Using Darwin native installer :: ~undmg~ can't handle the compression PortSwigger uses, so currently a non-starter. The closure size is also quite large because they vendor Chromium for the proxy browser.
+- Using JAR :: This builds fine, but doesn't come with a browser, so I tried bundling Firefox with a custom enterprise configuration to allow Burp to proxy requests.
+  I ran into trouble with the Java keystore, but I might look into this later.
 
 **** DONE Wireshark
 [[https://github.com/NixOS/nixpkgs/pull/330742][Fixed in nixpkgs]], I also wrote a [[./chmodbpf.nix][nix-darwin module]] to allow unprivileged BPF access
 
-**** TODO CLI tools
-nmap, curl, etc. These should be very easy.
+**** DONE CLI tools
+The basics ~nmap~, ~curl~, all work.
+I personally prefer [[https://github.com/pashky/restclient.el][restclient.el]] to Postman, but the latter also works.
 
-*** rev [2/5]
-**** TODO Binary Ninja
+*** rev [3/5]
+**** DONE Binary Ninja
 [[https://github.com/Feyorsh/fyshpkgs/blob/e86900ec51490734afb00a8a8c1b387be329f918/pkgs/binary-ninja/default.nix][fyshpkgs]]
 
 Still have to test connecting to a ~gdbserver~.
 
-Note that this is significantly less convenient from the CLI if you don't pin the pwnypus channel, as the version could change whenever and you would have to request a new download link, add the installer to the store, etc.
-For that reason, unfree packages are disabled by default, but can easily be enabled by setting =PWNYPUS_ALLOW_UNFREE= or having unfree packages enabled in your nixpkgs config. (TODO: add a way to override from a flake)
-
 **** TODO [[https://www.intel.com/content/www/us/en/developer/articles/tool/pin-a-dynamic-binary-instrumentation-tool.html][Pin]]
 Pretty sure this can only run on Intel chips; they dropped macOS support a while ago. May or may not be possible with [[*xenu][xenu]] (I've heard weird stuff about Pin on Rosetta).
 
-**** TODO IDA
+**** DONE IDA
 +I don't own a copy+, so I can't/won't support it. Feel free to open a PR.
 Knock knock, it's the Ida Pro 9 Beta 😳
 
-**** DONE Angr
-Haven't tried porting it, but might be tough (already in nixpkgs, sweet!)
+**** TODO Angr
+Currently [[https://github.com/NixOS/nixpkgs/blob/474d515b263a3edd712ee4fd3f4299c26bd5ed0e/pkgs/development/python-modules/angr/default.nix#L38][broken in nixpkgs]] as upstream [[https://github.com/angr/angr/issues/4921][hasn't updated unicorn]].
 
 **** DONE Ghidra
 The version in nixpkgs actually works better out of the box than when installing directly due to default macOS permissions behaviour.
 The one saving grace of Java is that it runs everywhere, including, unfortunately, on my device!
 
 *** misc [0/1]
-**** TODO Quantum
-Very few CTFs have quantum challenges, but I will nepo baby my interests in here, goddammit.
-This requires fixing qiskit in nixpkgs (and maybe adding pennylane).
 **** TODO Jails
 I have no idea what you could need besides stock Python for pyjails; this is currently a stub.
 
@@ -170,29 +238,3 @@ This is not a priority item, but at some point it might be nice to add stuff lik
 **** Steganography
 No.
 
-** Docker
-pwnypus should be able to spinup Docker containers provided at CTF, and ideally have a way for a Python =requirements.txt= to be spunup.
-This could be as simple as providing poetry2nix and Docker, we'll see.
-
-* FAQ
-- My devShell is missing a package?
-  Proprietary software is removed from devShells by default; this is to make all outputs evaluate so shell oneliners still work.
-  See section on binary ninja for more information.
-
-- Where do I find the application?
-  Nix does not add the Applications output to $PATH, but will add /bin if it exists; for this reason, I added shell aliases, like ~binja -> Binary Ninja.app~.
-
-- What is fyshpkgs?
-  fyshpkgs is my personal package repository, which includes some packages pwnypus uses. The reason they live in fyshpkgs and not nixpkgs is usually because they're unfree.
-
-- I'd like to add xyz...
-  You can add packages to a devshell like so: <TODO>
-  You can also merge 2 devshells into a devshell that includes the outputs of both with <TODO>.
-  If you think other people would benefit from your change, open a PR!
-
-- Aren't most of these packages in nixpkgs? What's the point of this repo?
-  Ideally, this repository would be nothing more than add a few predefined devshells for convenience. But many tools required for CTF are poorly supported in nixpkgs or require really hacky workarounds that don't really make sense to upstream for Linux users to deal with.
-  Whenever possible, development effort should be spent on fixing the issue upstream: see for example my efforts on fixing Sagemath.
-
-- What is xenu?
-  xenu (XNU emulating non-unfree) is a thin QEMU-like interface to the Apple [[https://developer.apple.com/documentation/virtualization][Virtualization]] framework; its primary use in pwnypus is to provide a lightweight VM that can run aarch64-linux and x86_64-linux (through rosetta-linux) binaries. (QEMU can use the apple _hypervisor_ framework as an accelerator for aarch64-linux, but does not have access to rosetta-linux to run x86. You can emulate an x86 VM, but that's quite slow.)
