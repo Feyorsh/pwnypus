@@ -102,6 +102,7 @@
               gdb
               # pwndbg
               gef
+              pkgs.radare2
 
               (pkgs.python312.withPackages(ps: with ps; [
                 pwntools
