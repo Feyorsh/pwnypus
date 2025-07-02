@@ -46,16 +46,14 @@
           crossSystem = "x86_64-linux";
           config.allowUnfree = true;
         }).__splicedPackages;
-
-        python = pkgs.python311;
       in {
         packages = rec { };
 
         devShells = rec {
           crypto = with pkgs; mkShell {
             packages = [
-              (python3.buildEnv.override {
-                extraLibs = with python3Packages; [
+              (python312.buildEnv.override {
+                extraLibs = with python312Packages; [
                   sage.lib
                   pwntools
                   pycryptodome
@@ -104,14 +102,19 @@
               gdb
               # pwndbg
               gef
+
+              (pkgs.python312.withPackages(ps: with ps; [
+                pwntools
+              ]))
             ];
           };
 
           rev = with pkgs; mkShell {
             packages = unfreeFilter [
-              (python.withPackages(ps: with ps; [
+              (python12.withPackages(ps: with ps; [
                 # angr    # waiting on upstream update to unicorn 2.1.1
                 z3-solver
+                pwntools
               ]))
               radare2
               ghidra
