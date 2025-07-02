@@ -102,7 +102,7 @@
           in pkgs.mkShell {
             packages = [
               gdb
-              pwndbg
+              # pwndbg
               gef
             ];
           };
