@@ -4,18 +4,15 @@
   inputs = {
     # be careful when updating flakes; cross gdb/linux takes ~1 hour to build
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    xenu = {
-      url = "github:Feyorsh/xenu";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     fyshpkgs = {
       url = "github:Feyorsh/fyshpkgs";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    pwndbg.url = "github:pwndbg/pwndbg";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = inputs@{ self, nixpkgs, fyshpkgs, flake-utils, ... }:
+  outputs = inputs@{ self, nixpkgs, fyshpkgs, pwndbg, flake-utils, ... }:
     let
       inherit (nixpkgs) lib;
 
@@ -46,13 +43,6 @@
           overlays = [ fyshpkgs.overlay.${system} ];
           config.allowUnfree = true;
         };
-        # ugh ok so *in theory* host and target packages can peacefully coexist  with .__splicedPackages, but tbh it's a lot of trial and error and a pain in the ass.
-        # hopefully splitting them up like this makes it easier to say e.g. `my-pkgs`.gdb and you can include multiple gdbs. This seems much more flexible.
-        pkgs-x86 = (import nixpkgs {
-          inherit system;
-          crossSystem = "x86_64-linux";
-          config.allowUnfree = true;
-        }).__splicedPackages;
       in {
         apps = {
           vm = {
@@ -134,49 +124,31 @@
           };
 
           pwn = let
-            # this arrangement is a bit fragile, and I'll tell you why:
-            # we want to debug e.g. x86_64-linux (target) binaries from an aarch64-darwin (host) machine
-            # gdb itself falls into the autoconf camp, so we just build it for targetPlatform == x86 != aarch64
-            # but the python ecosystem for plugins (capstone, unicorn, checksec, pyelftools),
-            # even though designed for x86, are cross platform by nature.
-            # so I only override the platform for bintools and gdb---nothing wrong with this in theory.
-            # *however*, usage of gdb in nixpkgs is not designed with this in mind. caveat emptor.
-            pkgsCross = pkgs-x86;
-            prefix = "${pkgsCross.stdenv.targetPlatform.config}-";
-            gdb = pkgsCross.buildPackages.gdb;
-            gdb' = pkgs.runCommand "gdb-cross" { nativeBuildInputs = [ ]; }
-            ''
-              mkdir -p $out/bin
-              ln -s ${gdb}/bin/${prefix}gdb $out/bin/gdb
-            '';
+            pkgsCross = pkgs.pkgsCross.gnu64;
             readelf' = pkgs.runCommand "readelf-cross" { nativeBuildInputs = [ ]; }
             ''
+
               mkdir -p $out/bin
-              ln -s ${pkgsCross.buildPackages.bintools-unwrapped}/bin/${prefix}readelf $out/bin/readelf
+              ln -s ${pkgsCross.buildPackages.bintools-unwrapped}/bin/${pkgsCross.stdenv.targetPlatform.config}readelf $out/bin/readelf
             '';
 
-            # currently marked as broken
-            pwndbg = (pkgs.pwndbg.override {
-              gdb = gdb';
-            }).overrideAttrs {
-              meta.broken = pkgsCross.stdenv.targetPlatform.system == "aarch64-darwin";
-            };
-            gef = (pkgs.gef.override {
-              gdb = gdb';
+            gef' = (pkgs.gef.override {
               bintools-unwrapped = readelf';
-            }).overrideAttrs {
-              meta.broken = pkgsCross.stdenv.targetPlatform.system == "aarch64-darwin";
-            };
-          in pkgs.mkShell {
+            });
+          in with pkgs; mkShell {
             packages = [
               gdb
-              # pwndbg
-              gef
-              pkgs.radare2
+              gef'
+              pwndbg.packages.${system}.pwndbg
+              radare2
 
-              (pkgs.python312.withPackages(ps: with ps; [
+              (python312.withPackages(ps: with ps; [
                 pwntools
               ]))
+
+              ghidra
+              binary-ninja
+              ida-pro
             ];
           };
 
