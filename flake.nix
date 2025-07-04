@@ -54,7 +54,7 @@
         packages = {
           run-vm = let
             script = { cores, memory, kernel, initrd, cmdline, vmImgSize }: pkgs.writeShellScriptBin "run-vm" ''
-              trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
+              trap "kill 0" SIGINT SIGTERM EXIT
 
               VM_IMAGE=$(readlink -f "''${VM_IMAGE:-./vm.raw}") || test -z "$VM_IMAGE"
               if test -n "$VM_IMAGE" && ! test -e "$VM_IMAGE"; then

@@ -6,7 +6,7 @@
   networking.interfaces.eth0.useDHCP = true;
 
   services.getty.autologinUser = "pwny";
-  services.getty.extraArgs = ["-i" "-n"];
+  services.getty.extraArgs = ["-i"];
   users.users.pwny.isNormalUser = true;
 
   users.users.pwny.extraGroups = ["wheel"];
@@ -20,6 +20,8 @@
     targets = [ "x86_64-linux" "i686-linux" "armv5tel-linux" "mips-linux" ];
     glibcs = builtins.listToAttrs (builtins.map(t: { name = t; value = (import pkgs.path { inherit (pkgs.stdenv) system; crossSystem = t; }).glibc; }) targets);
   in ''
+    trap "kill 0" SIGINT SIGTERM EXIT
+
     cd /tmp/shared
 
     if [[ "" != "''${bin:=$(sed -nE 's/.*fysh-binary-to-run=(\S+).*/\1/p' /proc/cmdline)}" ]]; then
@@ -34,10 +36,8 @@
         if [[ "" != "''$(sed -nE 's/.*(fysh-enable-gdb).*/\1/p' /proc/cmdline)" ]]; then
             echo "running $bin with GDB..."
             (socat VSOCK-LISTEN:1337 TCP:localhost:1338 &)
-            while true; do
-                "qemu-$arch" -g 1338 "./$bin"
-                sleep 1
-            done &
+            sleep 1
+            "qemu-$arch" -g 1338 "./$bin"
         else
             echo "running $bin..."
             socat VSOCK-LISTEN:1337,fork,reuseaddr EXEC:"qemu-$arch ./$bin"
@@ -45,18 +45,7 @@
     fi
   '';
   environment.etc.bash_logout.text = ''
-    # /etc/bash_logout: DO NOT EDIT -- this file has been generated automatically.
-
-    # Only execute this file once per shell.
-    if [ -n "$__ETC_BASHLOGOUT_SOURCED" ] || [ -n "$NOSYSBASHLOGOUT" ]; then return; fi
-    __ETC_BASHLOGOUT_SOURCED=1
-
     sudo poweroff
-
-    # Read system-wide modifications.
-    if test -f /etc/bash_logout.local; then
-        . /etc/bash_logout.local
-    fi
   '';
 
   environment.systemPackages = with pkgs; [
