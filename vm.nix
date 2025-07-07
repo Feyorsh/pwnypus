@@ -17,7 +17,7 @@
   nix.settings.experimental-features = "nix-command flakes";
 
   programs.bash.shellInit = let
-    targets = [ "x86_64-linux" "i686-linux" "armv5tel-linux" "mips-linux" ];
+    targets = [ "x86_64-linux" "i686-linux" "armv5tel-linux" "mipsel-linux" ];
     glibcs = builtins.listToAttrs (builtins.map(t: { name = t; value = (import pkgs.path { inherit (pkgs.stdenv) system; crossSystem = t; }).glibc; }) targets);
   in ''
     trap "kill 0" SIGINT SIGTERM EXIT
@@ -29,10 +29,11 @@
          *ARM,\ EABI5*) arch=arm; glibc=${glibcs.armv5tel-linux} ;;
          *x86-64*) arch=x86_64; glibc=${glibcs.x86_64-linux} ;;
          *80?86*) arch=i386; glibc=${glibcs.i686-linux} ;;
-         *MIPS*) arch=mips; glibc=${glibcs.mips-linux} ;;
+         *MIPS32*) arch=mipsel; glibc=${glibcs.mipsel-linux} ;;
          *) echo "can't run $bin:\n$platform"; exit 1 ;;
         esac
-        ${lib.getExe pkgs.patchelf} --set-interpreter "$glibc"/lib/ld-linux.so.3 "$bin"
+        ld=$(${lib.getExe pkgs.patchelf} --print-interpreter "$bin")
+        ${lib.getExe pkgs.patchelf} --set-interpreter "$glibc/lib/''${ld##*/}" "$bin"
         if [[ "" != "''$(sed -nE 's/.*(fysh-enable-gdb).*/\1/p' /proc/cmdline)" ]]; then
             echo "running $bin with GDB..."
             (socat VSOCK-LISTEN:1337 TCP:localhost:1338 &)
@@ -57,6 +58,11 @@
     qemu-user
     socat
   ];
+
+  system.activationScripts.bins = lib.stringAfter [ "binsh" ] ''
+    ln -sfn "${pkgs.coreutils}/bin/cat" /bin/cat
+    ln -sfn "${pkgs.coreutils}/bin/ls" /bin/ls
+  '';
 
   virtualisation.vmVariant.virtualisation.graphics = false;
   virtualisation.vmVariant.virtualisation.host.pkgs = pkgs;
