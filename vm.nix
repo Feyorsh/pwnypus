@@ -24,16 +24,21 @@
 
     cd /tmp/shared
 
+    function nixify {
+        case "''${platform:=$(${lib.getExe pkgs.file} "$1")}" in
+          *ARM,\ EABI5*) arch=arm; glibc=${glibcs.armv5tel-linux} ;;
+          *x86-64*) arch=x86_64; glibc=${glibcs.x86_64-linux} ;;
+          *80?86*) arch=i386; glibc=${glibcs.i686-linux} ;;
+          *MIPS32*) arch=mipsel; glibc=${glibcs.mipsel-linux} ;;
+          *) echo "can't run $bin:\n$platform"; exit 1 ;;
+         esac
+         ld=$(${lib.getExe pkgs.patchelf} --print-interpreter "$1")
+         ${lib.getExe pkgs.patchelf} --set-interpreter "$glibc/lib/''${ld##*/}" "$1"
+    }
+    export -f nixify
+
     if [[ "" != "''${bin:=$(sed -nE 's/.*fysh-binary-to-run=(\S+).*/\1/p' /proc/cmdline)}" ]]; then
-       case "''${platform:=$(${lib.getExe pkgs.file} "$bin")}" in
-         *ARM,\ EABI5*) arch=arm; glibc=${glibcs.armv5tel-linux} ;;
-         *x86-64*) arch=x86_64; glibc=${glibcs.x86_64-linux} ;;
-         *80?86*) arch=i386; glibc=${glibcs.i686-linux} ;;
-         *MIPS32*) arch=mipsel; glibc=${glibcs.mipsel-linux} ;;
-         *) echo "can't run $bin:\n$platform"; exit 1 ;;
-        esac
-        ld=$(${lib.getExe pkgs.patchelf} --print-interpreter "$bin")
-        ${lib.getExe pkgs.patchelf} --set-interpreter "$glibc/lib/''${ld##*/}" "$bin"
+        nixify "$bin"
         if [[ "" != "''$(sed -nE 's/.*(fysh-enable-gdb).*/\1/p' /proc/cmdline)" ]]; then
             echo "running $bin with GDB..."
             (socat VSOCK-LISTEN:1337 TCP:localhost:1338 &)
