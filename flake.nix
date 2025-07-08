@@ -136,7 +136,7 @@
               bintools-unwrapped = readelf';
             });
           in with pkgs; mkShell {
-            packages = [
+            packages = unfreeFilter [
               gdb
               gef'
               pwndbg.packages.${system}.pwndbg
