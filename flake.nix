@@ -45,35 +45,52 @@
         };
       in {
         apps = {
-          vm = {
+          xenu = {
             type = "app";
-            program = lib.getExe self.packages.${system}.run-vm;
+            program = lib.getExe self.packages.${system}.xenu-vm;
           };
         };
 
         packages = {
-          run-vm = let
-            script = { cores, memory, kernel, initrd, cmdline, vmImgSize }: pkgs.writeShellScriptBin "run-vm" ''
-              trap "kill 0" SIGINT SIGTERM EXIT
+          xenu-vm = let
+            script = { cores, memory, kernel, initrd, cmdline, vmImgSize }: pkgs.writeShellScriptBin "xenu-vm" ''
+              function find-up {
+                  path=$(pwd)
+                  while [[ "$path" != "" && ! -e "$path/$1" ]]; do
+                      path=''${path%/*}
+                  done
+                  [[ ! -e "$path/$1" ]] && echo "$path"
+              }
 
-              VM_IMAGE=$(readlink -f "''${VM_IMAGE:-./vm.raw}") || test -z "$VM_IMAGE"
+              XENU_STDIO_PORT=''${XENU_STDIO_PORT:-1337}
+              XENU_DEBUG_PORT=''${XENU_DEBUG_PORT:-1338}
+              if [[ "$XENU_DEBUG_PORT" == "$XENU_STDIO_PORT" ]]; then
+                  echo "\$XENU_STDIO_PORT and \$XENU_DEBUG_PORT cannot be the same (both are $XENU_STDIO_PORT)"
+                  exit 1
+              fi
+
+              XENU_DIR=$(find-up ''${XENU_DIR:-.xenu})
+              if [[ "$XENU_DIR" == "" ]]; then
+                  XENU_DIR=".xenu"
+                  mkdir -p $XENU_DIR
+              elif [[ ! -d "$XENU_DIR" ]]; then
+                  echo "error: $XENU_DIR is not a directory"
+                  exit 1
+              fi
+
+              VM_IMAGE="$XENU_DIR/vm.raw" || test -z "$VM_IMAGE"
               if test -n "$VM_IMAGE" && ! test -e "$VM_IMAGE"; then
-                  ${pkgs.qemu-utils}/bin/qemu-img create -f raw vm.raw "${toString vmImgSize}M"
-                  ${pkgs.e2fsprogs}/bin/mkfs.ext4 -L nixos vm.raw
+                  ${pkgs.qemu-utils}/bin/qemu-img create -f raw $VM_IMAGE "${toString vmImgSize}M"
+                  ${pkgs.e2fsprogs}/bin/mkfs.ext4 -L nixos $VM_IMAGE
               fi
 
-              rm -f ./vm.sock
+              rm -f $XENU_DIR/*.sock
+              socat TCP-LISTEN:$XENU_STDIO_PORT,fork,reuseaddr UNIX-CONNECT:$XENU_DIR/stdio.sock 2>/dev/null &
+              socat TCP-LISTEN:$XENU_DEBUG_PORT,fork,reuseaddr UNIX-CONNECT:$XENU_DIR/debug.sock 2>/dev/null &
 
-              if [[ "$1" == "-g" ]]; then
-                  QEMU_KERNEL_PARAMS+=" fysh-enable-gdb"
-              fi
-              if [[ $# -gt 0 ]]; then
-                  QEMU_KERNEL_PARAMS+=" fysh-binary-to-run=''${@: -1}"
-                  (socat TCP-LISTEN:1337,fork,reuseaddr UNIX-CONNECT:./vm.sock &)
-              fi
+              QEMU_KERNEL_PARAMS+=" xenu-run-args=''$@"
 
-
-              trap 'stty intr ^C' SIGINT SIGTERM EXIT
+              trap 'stty intr ^C; kill $(jobs -p)' INT TERM EXIT
               stty intr ^]
 
               ${lib.getExe pkgs.vfkit} \
@@ -86,10 +103,11 @@
                 --device rosetta,mountTag=rosetta \
                 --device virtio-serial,stdio \
                 --device virtio-net,nat \
-                --device virtio-blk,path=./vm.raw \
+                --device virtio-blk,path=$VM_IMAGE \
                 --device virtio-fs,sharedDir=/nix/store/,mountTag=nix-store \
                 --device virtio-fs,sharedDir=./,mountTag=shared \
-                --device virtio-vsock,port=1337,socketURL=$PWD/vm.sock,connect \
+                --device virtio-vsock,port=1337,socketURL=$(realpath $XENU_DIR/stdio.sock),connect \
+                --device virtio-vsock,port=1338,socketURL=$(realpath $XENU_DIR/debug.sock),connect \
                 --device virtio-rng
 
                 # TODO
@@ -137,6 +155,7 @@
             });
           in with pkgs; mkShell {
             packages = unfreeFilter [
+              patchelf
               gdb
               gef'
               pwndbg.packages.${system}.pwndbg
@@ -144,7 +163,9 @@
 
               (python312.withPackages(ps: with ps; [
                 pwntools
+                ropper
               ]))
+              one_gadget
 
               ghidra
               binary-ninja

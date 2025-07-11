@@ -1,4 +1,62 @@
 {pkgs, lib, config, ...}:
+let
+  targets = [ "x86_64-linux" "i686-linux" "armv5tel-linux" "mipsel-linux" ];
+  glibcs = builtins.listToAttrs (builtins.map(t: { name = t; value = (import pkgs.path { inherit (pkgs.stdenv) system; crossSystem = t; }).glibc; }) targets);
+  nixify = pkgs.writeShellScriptBin "nixify" ''
+    if [[ "$#" -ne 1 ]]; then
+        echo "usage: $0 <file>"
+        exit 1
+    fi
+    bin=$1
+
+    case "''${platform:=$(${lib.getExe pkgs.file} "$bin")}" in
+        *ARM,\ EABI5*) glibc=${glibcs.armv5tel-linux} ;;
+        *x86-64*) glibc=${glibcs.x86_64-linux} ;;
+        *80?86*) glibc=${glibcs.i686-linux} ;;
+        *MIPS32*) glibc=${glibcs.mipsel-linux} ;;
+        *) echo "can't patch $bin:\n$platform"; exit 1 ;;
+    esac
+    ld=$(${lib.getExe pkgs.patchelf} --print-interpreter "$bin")
+    ${lib.getExe pkgs.patchelf} --set-interpreter "$glibc/lib/''${ld##*/}" "$bin"
+  '';
+  xenu-run = pkgs.writeShellScriptBin "xenu" ''
+    if [[ "$#" -eq 1 ]]; then
+        bin=$1
+    elif [[ "$#" -eq 2 ]]; then
+        bin=$2
+        debug=1
+        if [[ "$1" != "-g" ]]; then
+            echo "usage: $0 [-g] <file>"
+            exit 1
+        fi
+    else
+        echo "usage: $0 [-g] <file>"
+        exit 1
+    fi
+
+    if [[ -w "$bin" ]]; then
+        ${lib.getExe nixify} "$bin"
+    fi
+
+    case "''${platform:=$(${lib.getExe pkgs.file} "$bin")}" in
+        *ARM,\ EABI5*) arch=arm ;;
+        *x86-64*) arch=x86_64 ;;
+        *80?86*) arch=i386 ;;
+        *MIPS32*) arch=mipsel ;;
+        *) echo "unsupported platform for $bin:\n$platform"; exit 1 ;;
+    esac
+
+    socat VSOCK-LISTEN:1338,reuseaddr TCP:localhost:1338 2>/dev/null &
+    trap "kill $! &>/dev/null; exit" INT TERM
+    if tty -s ; then
+        pipe='-'
+    else
+        pipe='VSOCK-LISTEN:1337,reuseaddr'
+    fi
+    socat "$pipe" EXEC:"qemu-$arch ''${debug+ -g 1338} $bin",nofork,pty,stderr 2>/dev/null
+  '';
+in
+
 {
   system.stateVersion = "23.11";
 
@@ -16,42 +74,14 @@
   nix.channel.enable = true;
   nix.settings.experimental-features = "nix-command flakes";
 
-  programs.bash.shellInit = let
-    targets = [ "x86_64-linux" "i686-linux" "armv5tel-linux" "mipsel-linux" ];
-    glibcs = builtins.listToAttrs (builtins.map(t: { name = t; value = (import pkgs.path { inherit (pkgs.stdenv) system; crossSystem = t; }).glibc; }) targets);
-  in ''
-    trap "kill 0" SIGINT SIGTERM EXIT
-
+  programs.bash.shellInit = ''
     cd /tmp/shared
 
-    function nixify {
-        case "''${platform:=$(${lib.getExe pkgs.file} "$1")}" in
-          *ARM,\ EABI5*) arch=arm; glibc=${glibcs.armv5tel-linux} ;;
-          *x86-64*) arch=x86_64; glibc=${glibcs.x86_64-linux} ;;
-          *80?86*) arch=i386; glibc=${glibcs.i686-linux} ;;
-          *MIPS32*) arch=mipsel; glibc=${glibcs.mipsel-linux} ;;
-          *) echo "can't run $bin:\n$platform"; exit 1 ;;
-         esac
-         ld=$(${lib.getExe pkgs.patchelf} --print-interpreter "$1")
-         ${lib.getExe pkgs.patchelf} --set-interpreter "$glibc/lib/''${ld##*/}" "$1"
-    }
-    export -f nixify
-
-    if [[ "" != "''${bin:=$(sed -nE 's/.*fysh-binary-to-run=(\S+).*/\1/p' /proc/cmdline)}" ]]; then
-        nixify "$bin"
-        if [[ "" != "''$(sed -nE 's/.*(fysh-enable-gdb).*/\1/p' /proc/cmdline)" ]]; then
-            echo "running $bin with GDB..."
-            (socat VSOCK-LISTEN:1337 TCP:localhost:1338 &)
-            sleep 1
-            "qemu-$arch" -g 1338 "./$bin"
-        else
-            echo "running $bin..."
-            socat VSOCK-LISTEN:1337,fork,reuseaddr EXEC:"qemu-$arch ./$bin"
-        fi
-    fi
+    IFS=, read -a argv <<<$(sed -nE 's/.*xenu-run-args=(\S+).*/\1/p' /proc/cmdline)
+    "''${argv[@]}"
   '';
   environment.etc.bash_logout.text = ''
-    sudo poweroff
+    sudo poweroff --no-wall
   '';
 
   environment.systemPackages = with pkgs; [
@@ -62,6 +92,9 @@
     fd
     qemu-user
     socat
+
+    nixify
+    xenu-run
   ];
 
   system.activationScripts.bins = lib.stringAfter [ "binsh" ] ''
