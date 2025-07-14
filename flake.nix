@@ -142,20 +142,19 @@
           };
 
           pwn = let
-            pkgsCross = pkgs.pkgsCross.gnu64;
-            readelf' = pkgs.runCommand "readelf-cross" { nativeBuildInputs = [ ]; }
-            ''
-
-              mkdir -p $out/bin
-              ln -s ${pkgsCross.buildPackages.bintools-unwrapped}/bin/${pkgsCross.stdenv.targetPlatform.config}readelf $out/bin/readelf
-            '';
-
+            x86_64-pkgs = pkgs.pkgsCross.gnu64;
+            binutils-multiarch = pkgs.binutils-unwrapped.override {
+              withAllTargets = true;
+            };
             gef' = (pkgs.gef.override {
-              bintools-unwrapped = readelf';
+              bintools-unwrapped = binutils-multiarch;
             });
           in with pkgs; mkShell {
             packages = unfreeFilter [
               patchelf
+              x86_64-pkgs.buildPackages.bintools-unwrapped
+              binutils-multiarch
+
               gdb
               gef'
               pwndbg.packages.${system}.pwndbg
