@@ -189,8 +189,8 @@
 
           rev = with pkgs; mkShell {
             packages = unfreeFilter [
-              (python12.withPackages(ps: with ps; [
-                # angr    # waiting on upstream update to unicorn 2.1.1
+              (python312.withPackages(ps: with ps; [
+                angr
                 z3-solver
                 pwntools
               ]))
