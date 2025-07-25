@@ -31,10 +31,14 @@
       darwinModules.xquartz = import ./xquartz.nix;
 
       nixosModules.vm = ./vm.nix;
+      nixosModules.xenu = ./xenu.nix;
 
       nixosConfigurations.linuxVM = lib.nixosSystem {
         system = "aarch64-linux";
-        modules = [ self.nixosModules.vm ];
+        modules = [
+          self.nixosModules.vm
+          self.nixosModules.xenu
+        ];
       };
     } // (flake-utils.lib.eachSystem [ "aarch64-darwin" ] (system:
       let
@@ -66,7 +70,7 @@
 
         packages = {
           xenu-vm = let
-            script = { cores, memory, kernel, initrd, cmdline, vmImgSize }: pkgs.writeShellScriptBin "xenu-vm" ''
+            script = { cores, memory, vmImgSize, kernel, initrd, cmdline, targets }: pkgs.writeShellScriptBin "xenu-vm" ''
               function find-up {
                   path=$(pwd)
                   while [[ "$path" != "" && ! -e "$path/$1" ]]; do
@@ -99,7 +103,7 @@
 
               rm -f $XENU_DIR/*.sock
               socat TCP-LISTEN:$XENU_STDIO_PORT,fork,reuseaddr UNIX-CONNECT:$XENU_DIR/stdio.sock 2>/dev/null &
-              socat TCP-LISTEN:$XENU_DEBUG_PORT,fork,reuseaddr UNIX-CONNECT:$XENU_DIR/debug.sock 2>/dev/null &
+              # socat UNIX-LISTEN:$XENU_DIR/gdb.sock UNIX-CONNECT:$XENU_DIR/debug.sock 2>/dev/null &
 
               QEMU_KERNEL_PARAMS+=" xenu-run-args=''$@"
 
@@ -127,16 +131,21 @@
                 # add rosetta mount options
                 # --device virtio-balloon
             '';
-            linux = self.nixosConfigurations.linuxVM.config.system.build.vm;
+            linuxWithTargets = tgts: (self.nixosConfigurations.linuxVM.extendModules {
+              modules     = [
+                ({ ... }: { xenu.targets = tgts; })
+              ];
+            }).config.system.build.vm;
             kernel_cmdline = lib.removePrefix "-append " (lib.findFirst (lib.hasPrefix "-append ") null self.nixosConfigurations.linuxVM.config.virtualisation.vmVariant.virtualisation.qemu.options);
           in
-            lib.makeOverridable script {
+            lib.makeOverridable script rec {
               cores = 1;
               memory = 1024; # MiB
-              kernel = "${linux}/system/kernel";
-              initrd = "${linux}/system/initrd";
-              cmdline = kernel_cmdline;
               vmImgSize = 5120;
+              kernel = "${linuxWithTargets targets}/system/kernel";
+              initrd = "${linuxWithTargets targets}/system/initrd";
+              cmdline = kernel_cmdline;
+              targets = [ "x86_64-linux" ];
             };
         };
 
@@ -167,6 +176,8 @@
               patchelf
               x86_64-pkgs.buildPackages.bintools-unwrapped
               binutils-multiarch
+              qemu
+              linux-scripts
 
               gdb
               gef'
