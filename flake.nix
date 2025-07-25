@@ -179,6 +179,8 @@
               ]))
               one_gadget
 
+              ruby_3_4.gems.seccomp-tools
+
               ghidra
               binary-ninja
               ida-pro
