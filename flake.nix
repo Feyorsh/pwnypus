@@ -40,7 +40,20 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ fyshpkgs.overlay.${system} ];
+          overlays = [
+            fyshpkgs.overlay.${system}
+            (self: super: {
+              pythonPackagesExtensions = super.pythonPackagesExtensions ++ [
+                (python-final: python-prev: {
+                  pwntools = python-prev.pwntools.overridePythonAttrs (oldAttrs: {
+                    patches = (oldAttrs.patches or []) ++ [
+                      ./patches/pwntools-unicorn.patch
+                    ];
+                  });
+                })
+              ];
+            })
+          ];
           config.allowUnfree = true;
         };
       in {

@@ -1,0 +1,32 @@
+From bb73e268a69780752a1c2bff300a069d3f715277 Mon Sep 17 00:00:00 2001
+From: George Huebner <george@feyor.sh>
+Date: Thu, 24 Jul 2025 23:09:27 -0400
+Subject: [PATCH] __ensure_memory_to_run_unicorn: don't request wx memory
+
+macOS systems with SIP enabled prohibit mmaping WX memory.
+unicorn doesn't run into this issue because it uses the MAP_JIT
+protection flag.
+
+See also:
+https://github.com/unicorn-engine/unicorn/blob/803fe5a47770360d1942de72600d3b295b521e31/qemu/accel/tcg/translate-all.c#L1021-L1032
+https://github.com/pwndbg/pwndbg/blob/2f6b5bbaea484391f55850a09a16efda161498f2/pwndbg/aglib/disasm/__init__.py#L305-L316
+---
+ pwnlib/elf/plt.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/pwnlib/elf/plt.py b/pwnlib/elf/plt.py
+index 70846177..a4651dda 100644
+--- a/pwnlib/elf/plt.py
++++ b/pwnlib/elf/plt.py
+@@ -65,7 +65,7 @@ def __ensure_memory_to_run_unicorn():
+         from mmap import mmap, MAP_ANON, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE
+ 
+         mm = mmap(
+-            -1, 1024 * 1024 * 1024, MAP_PRIVATE | MAP_ANON, PROT_WRITE | PROT_READ | PROT_EXEC
++            -1, 1024 * 1024 * 1024, MAP_PRIVATE | MAP_ANON, PROT_WRITE | PROT_READ
+         )
+         mm.close()
+     except OSError:
+-- 
+2.49.0
+
