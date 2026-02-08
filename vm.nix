@@ -17,7 +17,9 @@
   nix.settings.experimental-features = "nix-command flakes";
 
   environment.etc.bash_logout.text = ''
-    sudo poweroff --no-wall
+    if [[ $SHLVL -eq 1 ]]; then
+        sudo poweroff --no-wall
+    fi
   '';
 
   environment.systemPackages = with pkgs; [
