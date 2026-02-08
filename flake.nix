@@ -8,7 +8,14 @@
       url = "github:Feyorsh/fyshpkgs";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    pwndbg.url = "github:pwndbg/pwndbg";
+    pwndbg = {
+      url = "github:pwndbg/pwndbg";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    debuginfod-zig = {
+      url = "github:pwndbg/debuginfod-zig";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -46,6 +53,20 @@
           inherit system;
           overlays = [
             fyshpkgs.overlay.${system}
+            (self: super: {
+              gdb = super.gdb.overrideAttrs (prev: {
+                buildInputs = (prev.buildInputs or []) ++ [
+                  inputs.debuginfod-zig.packages.${system}.dynamic
+                ];
+                configureFlags = (prev.configureFlags or []) ++ [
+                  (lib.withFeature true "debuginfod")
+                ];
+                # surely there's a better way to do this..?
+                postFixup = ''
+                  install_name_tool -add_rpath "${inputs.debuginfod-zig.packages.${system}.dynamic}/lib" "$out/bin/gdb"
+                '';
+              });
+            })
             (self: super: {
               pythonPackagesExtensions = super.pythonPackagesExtensions ++ [
                 (python-final: python-prev: {
