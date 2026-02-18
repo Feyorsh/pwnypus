@@ -31,7 +31,7 @@
         pns = if builtins.length freePkgs.wrong == 1 then " ${ws} is" else "s ${ws} are";
       in
         if !(allowUnfree || freePkgs.wrong == [])
-        then lib.warn "pacakge${pns} unfree and won't be evaluated (set PWNYPUS_ALLOW_UNFREE=1 to allow)" freePkgs.right
+        then lib.warn "package${pns} unfree and won't be evaluated (set PWNYPUS_ALLOW_UNFREE=1 to allow)" freePkgs.right
         else ps;
     in {
       darwinModules.chmodbpf = import ./chmodbpf.nix;
