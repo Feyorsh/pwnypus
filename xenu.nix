@@ -74,6 +74,7 @@ in
         fi
 
         case "''${platform:=$(${lib.getExe pkgs.file} "$bin")}" in
+            *ARM\ aarch64*) arch=aarch64 ;;
             *ARM,\ EABI5*) arch=arm ;;
             *x86-64*) arch=x86_64 ;;
             *80?86*) arch=i386 ;;
